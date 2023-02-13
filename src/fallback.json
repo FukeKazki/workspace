@@ -4,9 +4,14 @@
       "https://fukke.cafe"
     ]
   },
-  "default": {
+  "free": {
     "tabs": [
-      ""
+      "https://tweetdeck.twitter.com/"
+    ] 
+  },
+  "free2": {
+    "tabs": [
+      "https://gist.github.com/FukeKazki/05d728923db3329d775f9293a8fece4c"
     ]
   }
 }
