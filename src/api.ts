@@ -1,9 +1,5 @@
-import {
-  Application,
-  Router,
-  RouterContext,
-} from "https://deno.land/x/oak@v6.5.0/mod.ts";
-import { oakCors } from "https://deno.land/x/cors@v1.2.2/mod.ts";
+import { Application, Router, RouterContext } from "oak";
+import { oakCors } from "cors";
 import fallback from "./fallback.json" assert { type: "json" };
 
 const app = new Application();
