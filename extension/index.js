@@ -179,11 +179,3 @@ check()
 chrome.windows.onFocusChanged.addListener(
     () => check()
 )
-
-chrome.commands.onCommand.addListener(async (command) => {
-    switch (command) {
-      case "createNewTabeInActiveTabGroup":
-        await createNewTabInActiveTabGroup()
-        break;
-    }
-  });
