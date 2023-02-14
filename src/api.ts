@@ -28,13 +28,13 @@ router.get("/active", async (ctx: RouterContext) => {
   const stdout = new TextDecoder().decode(await p.output());
   const lines = stdout.split("\n");
   const activeLine = lines.find((line) => line.includes("(active)"));
-  const windowName = activeLine?.split(": ")[1].split(" (")[0];
-  const escapedWindowName =
-    windowName?.endsWith("*") || windowName?.endsWith("-")
-      ? windowName.slice(0, windowName.length - 1)
-      : "";
+  const windowNameMatcher =
+    /(?<index>[0-9]{1}): (?<name>[\w/:%#\$&\?~\.=\+\-]+)(?<current>\*?) \((?<panel>[0-9]{1}) panes\)/;
+  const groups = activeLine?.match(windowNameMatcher)?.groups;
+  const name = groups?.name;
+  if (!name) console.warn("nameが取得できませんでした");
   ctx.response.body = {
-    window_name: escapedWindowName,
+    window_name: name,
   };
 });
 
