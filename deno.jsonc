@@ -1,12 +1,16 @@
 {
   "fmt": {
     "files": {
-      "include": ["src/"]
+      "include": [
+        "src/"
+      ]
     }
   },
   "lint": {
     "files": {
-      "include": ["src/"]
+      "include": [
+        "src/"
+      ]
     }
   },
   "imports": {
