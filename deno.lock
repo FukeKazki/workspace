@@ -73,6 +73,7 @@
     "https://deno.land/x/oak@v6.5.0/tssCompare.ts": "814361c23298a7a2d0d573ae85902cd85c761a089b2d5edf4e2be4652505c80c",
     "https://deno.land/x/oak@v6.5.0/types.d.ts": "21849915a7385d7278800deb1df4308add5ca7d6b24bf63f155821e5159b5dea",
     "https://deno.land/x/oak@v6.5.0/util.ts": "05ae600eac3bfaf124981a54b315e14f54f3e021332543bb1241c69e59955d23",
-    "https://deno.land/x/path_to_regexp@v6.2.0/index.ts": "e94c04a44bbecac99ff2db2d831afe98b423e627b775cb57fc7935f848c64c51"
+    "https://deno.land/x/path_to_regexp@v6.2.0/index.ts": "e94c04a44bbecac99ff2db2d831afe98b423e627b775cb57fc7935f848c64c51",
+    "https://unpkg.com/chrome-types@0.1.153/index.d.ts": "6818d8bf54500400ad2ea968ffd5e6d87e6575ffe0170eec78c496b38c6f3dd3"
   }
 }
