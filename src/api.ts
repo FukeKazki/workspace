@@ -25,10 +25,11 @@ router.get("/active", async (ctx: RouterContext) => {
   const lines = stdout.split("\n");
   const activeLine = lines.find((line) => line.includes("(active)"));
   const windowNameMatcher =
-    /(?<index>[0-9]{1}): (?<name>[\w/:%#\$&\?~\.=\+\-]+)(?<current>\*?) \((?<panel>[0-9]{1}) panes\)/;
+    /(?<index>[0-9]{1}): (?<name>[\w/:%#\$&\?~\.=\+\-]+)(?<prefix>\*?Z?) \((?<panel>[0-9]{1}) panes\)/;
   const groups = activeLine?.match(windowNameMatcher)?.groups;
   const name = groups?.name;
-  if (!name) console.warn("nameが取得できませんでした");
+  if (!name) console.warn("nameが取得できませんでした", activeLine, name);
+  console.log(name);
   ctx.response.body = {
     window_name: name,
   };
