@@ -41,8 +41,6 @@ async function changeTabGroup(groupName) {
     }
 }
 
-// 拡張機能がタブを作成している間はonCreatedでしてる処理が実行されないようにする
-let internalTabCreatingModeStartUnixTimeMs = 0
 /**
  * 新しいタブグループを作成する
  */
@@ -152,7 +150,18 @@ function chromeTabGroupsQuery (option) {
         chrome.tabGroups.query(option, (groups) => resolve(groups))
     })
 }
-
+// アクティブなタブグループのIDを保持しておく
+let activeTabGroupId = ''
+async function findActiveTabGrup() {
+    const groups = await chromeTabGroupsQuery({})
+    for await (const group of groups) {
+        const tabsInGroup = await chromeTabsQuery({ groupId: group.id })
+        const hasActiveTabInGroup = tabsInGroup.some(tab => tab.active === true)
+        if (hasActiveTabInGroup) {
+            activeTabGroupId = group.id
+        }
+    }
+}
 
 /**
  * 通知を表示する
@@ -168,32 +177,6 @@ function createNotification(title, message) {
         priority: 1
     });
 }
-// アクティブなタブグループのIDを保持しておく
-let activeTabGroupId = ''
-async function findActiveTabGrup() {
-    const groups = await chromeTabGroupsQuery({})
-    for await (const group of groups) {
-        const tabsInGroup = await chromeTabsQuery({ groupId: group.id })
-        const hasActiveTabInGroup = tabsInGroup.some(tab => tab.active === true)
-        if (hasActiveTabInGroup) {
-            activeTabGroupId = group.id
-            await switchTmuxWindow(group.title)
-        }
-    }
-}
-
-// tmux側のウィンドウを選択中のタブグループの名前と一致するものに切り替える
-async function switchTmuxWindow (windowName) {
-    const headers = new Headers()
-    headers.append('Content-Type', 'application/json')
-    await fetch(`${API_BASE}switch`, {
-        method: 'POST',
-        body:  JSON.stringify({
-            "window_name": windowName
-        }),
-        headers
-    })
-}
 
 check()
 findActiveTabGrup()
@@ -203,17 +186,23 @@ chrome.windows.onFocusChanged.addListener(
         findActiveTabGrup()
     }
 )
-chrome.tabs.onActivated.addListener(
-    () => findActiveTabGrup()
-)
-chrome.tabs.onRemoved.addListener(
-  () => findActiveTabGrup()
-)
 // 新規タブを作った時に、今アクティブなタブグループの中に入れ込む
 chrome.tabs.onCreated.addListener(
     (tab) => {
+         chromeTabsGroup({ groupId: activeTabGroupId, tabIds: [tab.id] })
+    }
+)
+
+chrome.tabs.onRemoved.addListener(
+    () => findActiveTabGrup()
+)
+
+// 新規タブを作った時に、今アクティブなタブグループの中に入れ込む
+chrome.tabs.onCreated.addListener(
+    async (tab) => {
         if (Date.now() - internalTabCreatingModeStartUnixTimeMs > 500) {
-            chromeTabsGroup({ groupId: activeTabGroupId, tabIds: [tab.id] })
+            const groupId = activeTabGroupId || (await chromeTabGroupsQuery({ collapsed: false }))[0].id
+            chromeTabsGroup({ groupId, tabIds: [tab.id] })
         }
     }
 )
