@@ -3,6 +3,15 @@
 // This code was bundled using `deno bundle` and it's not recommended to edit it manually
 
 const API_BASE = "http://localhost:9281/";
+function createNotification(title, message) {
+    chrome.notifications.create({
+        type: "basic",
+        iconUrl: "/icon.png",
+        title: title,
+        message: message,
+        priority: 1
+    });
+}
 let recentWindowName = "";
 let internalTabCreatingModeStartUnixTimeMs = 0;
 function check() {
@@ -78,15 +87,6 @@ function createNewTabGroup(groupName) {
         });
     }).catch((e)=>{
         createNotification("通信エラー", e.toString());
-    });
-}
-function createNotification(title, message) {
-    chrome.notifications.create({
-        type: "basic",
-        iconUrl: "/icon.png",
-        title: title,
-        message: message,
-        priority: 1
     });
 }
 let activeTabGroupId;

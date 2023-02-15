@@ -1,4 +1,5 @@
-const API_BASE = "http://localhost:9281/";
+import { API_BASE, createNotification } from "./util.ts";
+
 let recentWindowName = "";
 
 // 拡張機能がタブを作成している間はonCreatedでしてる処理が実行されないようにする
@@ -71,21 +72,6 @@ function createNewTabGroup(groupName: string) {
     await chrome.tabGroups.update(groupId, { title: groupName });
   }).catch((e) => {
     createNotification("通信エラー", e.toString());
-  });
-}
-
-/**
- * 通知を表示する
- * @param {string} title
- * @param {string} message
- */
-function createNotification(title: string, message: string) {
-  chrome.notifications.create({
-    type: "basic",
-    iconUrl: "/icon.png",
-    title: title,
-    message: message,
-    priority: 1,
   });
 }
 
