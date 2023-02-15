@@ -22,27 +22,27 @@ function check() {
     });
 }
 async function changeTabGroup(groupName) {
-    const groups = await chromeTabGroupsQuery({});
+    const groups = await chrome.tabGroups.query({});
     const group = groups.find((group)=>group.title === groupName);
     if (!group) {
         createNewTabGroup(groupName);
         return;
     }
     for await (const group1 of groups){
-        await chromeTabGroupsUpdate(group1.id, {
+        await chrome.tabGroups.update(group1.id, {
             collapsed: true
         });
     }
-    await chromeTabGroupsUpdate(group.id, {
+    await chrome.tabGroups.update(group.id, {
         collapsed: false
     });
-    const tabsInGroup = await chromeTabsQuery({
+    const tabsInGroup = await chrome.tabs.query({
         groupId: group.id
     });
     const hasActiveTabInGroup = tabsInGroup.some((tab)=>tab.active === true);
     if (hasActiveTabInGroup) {} else {
         if (tabsInGroup[0]?.id) {
-            await chromeTabsUpdate(tabsInGroup[0].id, {
+            await chrome.tabs.update(tabsInGroup[0].id, {
                 active: true
             });
         }
@@ -52,9 +52,9 @@ function createNewTabGroup(groupName) {
     fetch(`${API_BASE}fallback`).then(async (res)=>{
         const json = await res.json();
         const tabs = json[groupName]?.tabs ?? json.default?.tabs ?? [];
-        const groups = await chromeTabGroupsQuery({});
+        const groups = await chrome.tabGroups.query({});
         for await (const group of groups){
-            await chromeTabGroupsUpdate(group.id, {
+            await chrome.tabGroups.update(group.id, {
                 collapsed: true
             });
         }
@@ -65,44 +65,26 @@ function createNewTabGroup(groupName) {
             const option = tab ? {
                 url: tab
             } : {};
-            const { id  } = await chromeTabsCreate(option);
+            const { id  } = await chrome.tabs.create(option);
             if (id) {
                 tabIds.push(id);
             }
         }
-        const groupId = await chromeTabsGroup({
+        const groupId = await chrome.tabs.group({
             tabIds
         });
-        await chromeTabGroupsUpdate(groupId, {
+        await chrome.tabGroups.update(groupId, {
             title: groupName
         });
     }).catch((e)=>{
         createNotification("通信エラー", e.toString());
     });
 }
-function chromeTabsCreate(option) {
-    return chrome.tabs.create(option);
-}
-function chromeTabsQuery(option) {
-    return chrome.tabs.query(option);
-}
-function chromeTabsUpdate(tabId, option) {
-    return chrome.tabs.update(tabId, option);
-}
-function chromeTabsGroup(option) {
-    return chrome.tabs.group(option);
-}
-function chromeTabGroupsUpdate(groupId, option) {
-    return chrome.tabGroups.update(groupId, option);
-}
-function chromeTabGroupsQuery(option) {
-    return chrome.tabGroups.query(option);
-}
 let activeTabGroupId = 0;
 async function findActiveTabGrup() {
-    const groups = await chromeTabGroupsQuery({});
+    const groups = await chrome.tabGroups.query({});
     for await (const group of groups){
-        const tabsInGroup = await chromeTabsQuery({
+        const tabsInGroup = await chrome.tabs.query({
             groupId: group.id
         });
         const hasActiveTabInGroup = tabsInGroup.some((tab)=>tab.active === true);
@@ -128,7 +110,7 @@ chrome.windows.onFocusChanged.addListener(()=>{
 });
 chrome.tabs.onCreated.addListener((tab)=>{
     if (!tab.id) return;
-    chromeTabsGroup({
+    chrome.tabs.group({
         groupId: activeTabGroupId,
         tabIds: [
             tab.id
@@ -138,10 +120,10 @@ chrome.tabs.onCreated.addListener((tab)=>{
 chrome.tabs.onRemoved.addListener(()=>findActiveTabGrup());
 chrome.tabs.onCreated.addListener(async (tab)=>{
     if (!tab.id) return;
-    const groupId = activeTabGroupId || (await chromeTabGroupsQuery({
+    const groupId = activeTabGroupId || (await chrome.tabGroups.query({
         collapsed: false
     }))[0]?.id;
-    chromeTabsGroup({
+    chrome.tabs.group({
         groupId,
         tabIds: [
             tab.id
