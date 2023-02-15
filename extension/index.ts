@@ -1,6 +1,9 @@
 const API_BASE = "http://localhost:9281/";
 let recentWindowName = "";
 
+// 拡張機能がタブを作成している間はonCreatedでしてる処理が実行されないようにする
+let internalTabCreatingModeStartUnixTimeMs = 0;
+
 function check() {
   fetch(`${API_BASE}active`).then(async (res) => {
     const json = await res.json();
@@ -36,13 +39,10 @@ async function changeTabGroup(groupName: string) {
   await chrome.tabGroups.update(group.id, { collapsed: false });
   const tabsInGroup = await chrome.tabs.query({ groupId: group.id });
   const hasActiveTabInGroup = tabsInGroup.some((tab) => tab.active === true);
-  if (hasActiveTabInGroup) {
-    // createNotification('タブグループの移動をキャンセルしました', `${groupName}内のタブをすでに開いています`)
-  } else {
-    // createNotification('タブグループを移動しました', `${groupName}に移動しました`)
-    if (tabsInGroup[0]?.id) {
-      await chrome.tabs.update(tabsInGroup[0].id, { active: true });
-    }
+  if (!hasActiveTabInGroup) {
+    const id = tabsInGroup[0]?.id;
+    if (!id) return;
+    await chrome.tabs.update(id, { active: true });
   }
 }
 
@@ -53,42 +53,31 @@ function createNewTabGroup(groupName: string) {
   fetch(`${API_BASE}fallback`).then(async (res) => {
     const json = await res.json();
     const tabs = json[groupName]?.tabs ?? json.default?.tabs ?? [];
+    const tabIds = [];
     const groups = await chrome.tabGroups.query({});
     for await (const group of groups) {
       await chrome.tabGroups.update(group.id, { collapsed: true });
     }
-    const tabIds: [number] = [-1];
     for await (const tab of tabs) {
       const option = tab ? { url: tab } : {};
-      const { id } = await chrome.tabs.create(option);
-      if (id) {
-        tabIds.push(id);
-      }
+      internalTabCreatingModeStartUnixTimeMs = Date.now();
+      const id = (await chrome.tabs.create(option)).id;
+      if (!id) continue;
+      tabIds.push(id);
     }
-    const groupId = await chrome.tabs.group({
-      tabIds,
-    });
+    // @ts-ignore タプルが変なのなんとかする
+    const groupId = await chrome.tabs.group({ tabIds });
+    if (!groupId) return;
     await chrome.tabGroups.update(groupId, { title: groupName });
   }).catch((e) => {
     createNotification("通信エラー", e.toString());
   });
 }
 
-// アクティブなタブグループのIDを保持しておく
-let activeTabGroupId = 0;
-async function findActiveTabGrup() {
-  const groups = await chrome.tabGroups.query({});
-  for await (const group of groups) {
-    const tabsInGroup = await chrome.tabs.query({ groupId: group.id });
-    const hasActiveTabInGroup = tabsInGroup.some((tab) => tab.active === true);
-    if (hasActiveTabInGroup) {
-      activeTabGroupId = group.id;
-    }
-  }
-}
-
 /**
  * 通知を表示する
+ * @param {string} title
+ * @param {string} message
  */
 function createNotification(title: string, message: string) {
   chrome.notifications.create({
@@ -100,20 +89,31 @@ function createNotification(title: string, message: string) {
   });
 }
 
+// アクティブなタブグループのIDを保持しておく
+let activeTabGroupId: number;
+async function findActiveTabGrup() {
+  const groups = await chrome.tabGroups.query({});
+  for await (const group of groups) {
+    const tabsInGroup = await chrome.tabs.query({ groupId: group.id });
+    const hasActiveTabInGroup = tabsInGroup.some((tab) => tab.active === true);
+    if (hasActiveTabInGroup) {
+      activeTabGroupId = group.id;
+    }
+  }
+}
+
 check();
 findActiveTabGrup();
+
 chrome.windows.onFocusChanged.addListener(
   () => {
     check();
     findActiveTabGrup();
   },
 );
-// 新規タブを作った時に、今アクティブなタブグループの中に入れ込む
-chrome.tabs.onCreated.addListener(
-  (tab) => {
-    if (!tab.id) return;
-    chrome.tabs.group({ groupId: activeTabGroupId, tabIds: [tab.id] });
-  },
+
+chrome.tabs.onActivated.addListener(
+  () => findActiveTabGrup(),
 );
 
 chrome.tabs.onRemoved.addListener(
@@ -123,9 +123,11 @@ chrome.tabs.onRemoved.addListener(
 // 新規タブを作った時に、今アクティブなタブグループの中に入れ込む
 chrome.tabs.onCreated.addListener(
   async (tab) => {
-    if (!tab.id) return;
-    const groupId = activeTabGroupId ||
-      (await chrome.tabGroups.query({ collapsed: false }))[0]?.id;
-    chrome.tabs.group({ groupId, tabIds: [tab.id] });
+    if (Date.now() - internalTabCreatingModeStartUnixTimeMs > 500) {
+      const groupId = activeTabGroupId ||
+        (await chrome.tabGroups.query({ collapsed: false }))[0].id;
+      if (!tab.id) return;
+      chrome.tabs.group({ groupId, tabIds: [tab.id] });
+    }
   },
 );

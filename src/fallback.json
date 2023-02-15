@@ -13,5 +13,8 @@
     "tabs": [
       "https://gist.github.com/FukeKazki/05d728923db3329d775f9293a8fece4c"
     ]
+  },
+  "default": {
+    "tabs": [""]
   }
 }
