@@ -14,7 +14,14 @@
       "https://gist.github.com/FukeKazki/05d728923db3329d775f9293a8fece4c"
     ]
   },
+  "astro": {
+    "tabs": [
+      "https://docs.astro.build/en/getting-started/"
+    ]
+  },
   "default": {
-    "tabs": [""]
+    "tabs": [
+      ""
+    ]
   }
 }

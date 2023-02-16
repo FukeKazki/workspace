@@ -28,10 +28,13 @@
   },
   "imports": {
     "oak": "https://deno.land/x/oak@v6.5.0/mod.ts",
-    "cors": "https://deno.land/x/cors@v1.2.2/mod.ts"
+    "cors": "https://deno.land/x/cors@v1.2.2/mod.ts",
+    "socket.io": "https://deno.land/x/socket_io@0.2.0/mod.ts",
+    "std/": "https://deno.land/std@0.166.0/"
   },
   "tasks": {
     "dev": "deno run -A src/api.ts",
+    "dev:socket": "deno run -A src/socket/index.ts",
     "build:extension": "deno bundle ./extension/index.ts ./extension/index.js"
   }
 }
