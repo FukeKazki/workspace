@@ -1,126 +1,193 @@
-// deno-fmt-ignore-file
-// deno-lint-ignore-file
-// This code was bundled using `deno bundle` and it's not recommended to edit it manually
+// 書き捨てだからJSでいいやって思ったけど辛くね
+// 1ファイルJSの綺麗な書き方わからん
 
-const API_BASE = "http://localhost:9281/";
+const API_BASE = 'http://localhost:9281/'
+const FREE_MODE_KEY = 'FREE'
+const MANAGE_MODE_KEY = 'MANAGE'
+
+async function setMode (mode) {
+    await chrome.storage.local.set({ workspaceMode: mode })
+}
+
+async function getMode () {
+    return (await chrome.storage.local.get('workspaceMode'))['workspaceMode'] || MANAGE_MODE_KEY
+}
+
+async function setSession (session) {
+    await chrome.storage.local.set({ workspaceSession: session })
+}
+
+async function getSession () {
+    return (await chrome.storage.local.get('workspaceSession'))['workspaceSession'] || {}
+}
+
+async function switchMode () {
+    const mode = await getMode() === MANAGE_MODE_KEY ? FREE_MODE_KEY : MANAGE_MODE_KEY
+    await setMode(mode)
+    findActiveTmuxWindow()
+
+    if (await getMode() === FREE_MODE_KEY) {
+        createNotification('フリーモード', 'セッションは管理されていません')
+    }
+}
+
+async function moveCurrentTabToFreeSession () {
+    const activeTabs = await chrome.tabs.query({ active: true })
+    const activeTabIds = activeTabs.map(tab => tab.id)
+    await chrome.tabs.remove(activeTabIds)
+    await saveCurrentSesion()
+
+    const freeSession = (await chrome.storage.local.get(FREE_MODE_KEY))[FREE_MODE_KEY]
+    activeTabs.forEach(tab => {
+        freeSession.tabs.push(tab)
+    })
+    await chrome.storage.local.set({ [freeSession.name]: freeSession })
+    createNotification('タブ移動', '選択中のタブをフリーセッションに移動しました')
+}
+
+chrome.commands.onCommand.addListener((command) => {
+    switch (command) {
+        case "switchMode":
+            switchMode()
+            break;
+        case "tabMove":
+            moveCurrentTabToFreeSession()
+            break;
+    }
+});
+
+// セッションに必要なタブを復元する
+async function restoreSession (sessionName) {
+    await saveCurrentSesion()
+    const nextSession = (await chrome.storage.local.get(sessionName))[sessionName]
+    if (!nextSession) {
+        createNewSession(sessionName)
+        return
+    }
+
+    if (sessionName !== FREE_MODE_KEY) {
+        createNotification('セッション管理中', `${sessionName}を開きました`)
+    }
+
+    // 次のセッションと今開いているタブの内容が同じ場合
+    // 内部で保持してるオブジェクトだけ更新する
+    const tabs = await chrome.tabs.query({})
+    if (tabs?.length === nextSession.tabs.length) {
+        let isSame = true
+        tabs.forEach((tab, i) => {
+            if (tab.url !== nextSession.tabs[i].url) {
+                isSame = false
+            }
+        })
+        if (isSame) {
+            await setSession(nextSession)
+            return
+        }
+    }
+
+    await setSession(nextSession)
+    syncSessionTabs()
+}
+
+async function createNewSession (sessionName) {
+    setSession({
+        name: sessionName,
+        tabs: [
+            {
+                url: '',
+                active: true
+            }
+        ]
+    })
+    syncSessionTabs()
+}
+
+async function syncSessionTabs () {
+    const oldTabs = await chrome.tabs.query({})
+    for await (let newTab of (await getSession()).tabs) {
+        if (newTab.url) {
+            await chrome.tabs.create({ url: newTab.url, active: newTab.active })
+        } else {
+            await chrome.tabs.create({ active: newTab.active })
+        }
+    }
+    const oldTabIds = oldTabs.map(oldTab => oldTab.id)
+    await chrome.tabs.remove(oldTabIds)
+}
+
+async function saveCurrentSesion () {
+    const session = await getSession()
+    if (!session.name) {
+        return
+    }
+
+    session.tabs = await chrome.tabs.query({})
+    await chrome.storage.local.set({ [session.name]: session })
+}
+
+function findActiveTmuxWindow() {
+    fetch(`${API_BASE}active`).then(async (res) => {
+        const json = await res.json()
+        const tmuxWindowName = json.window_name
+        if (!tmuxWindowName) {
+            createNotification('エラー', 'アクティブなtmuxセッションまたはウィンドウが見つかりません')
+            return
+        }
+        afterTmuxWindowCheckFunc(tmuxWindowName)
+    }).catch(e => {
+        createNotification('通信エラー', e.toString())
+    })
+}
+
+async function afterTmuxWindowCheckFunc (tmuxWindowName) {
+    const mode = await getMode()
+    const session = await getSession()
+    if (mode === FREE_MODE_KEY && session.name !== FREE_MODE_KEY) {
+        restoreSession(FREE_MODE_KEY)
+        return
+    }
+    if (mode === FREE_MODE_KEY && session.name === FREE_MODE_KEY) {
+        return
+    }
+    if (session.name === tmuxWindowName) {
+        return
+    }
+    restoreSession(tmuxWindowName)
+}
+
+/**
+ * 通知を表示する
+ * @param {string} title 
+ * @param {string} message 
+ */
 function createNotification(title, message) {
     chrome.notifications.create({
-        type: "basic",
-        iconUrl: "/icon.png",
+        type: 'basic',
+        iconUrl: '/icon.png',
         title: title,
         message: message,
         priority: 1
     });
 }
-let recentWindowName = "";
-let internalTabCreatingModeStartUnixTimeMs = 0;
-function check() {
-    fetch(`${API_BASE}active`).then(async (res)=>{
-        const json = await res.json();
-        const windowName = json.window_name;
-        if (!windowName) {
-            createNotification("エラー", "アクティブなtmuxセッションまたはウィンドウが見つかりません");
-            return;
-        }
-        if (windowName === recentWindowName) {
-            return;
-        }
-        recentWindowName = windowName;
-        await changeTabGroup(windowName);
-    }).catch((e)=>{
-        createNotification("通信エラー", e.toString());
-    });
-}
-async function changeTabGroup(groupName) {
-    const groups = await chrome.tabGroups.query({});
-    const group = groups.find((group)=>group.title === groupName);
-    if (!group) {
-        createNewTabGroup(groupName);
-        return;
-    }
-    for await (const group1 of groups){
-        await chrome.tabGroups.update(group1.id, {
-            collapsed: true
-        });
-    }
-    await chrome.tabGroups.update(group.id, {
-        collapsed: false
-    });
-    const tabsInGroup = await chrome.tabs.query({
-        groupId: group.id
-    });
-    const hasActiveTabInGroup = tabsInGroup.some((tab)=>tab.active === true);
-    if (!hasActiveTabInGroup) {
-        const id = tabsInGroup[0]?.id;
-        if (!id) return;
-        await chrome.tabs.update(id, {
-            active: true
-        });
-    }
-}
-function createNewTabGroup(groupName) {
-    fetch(`${API_BASE}fallback`).then(async (res)=>{
-        const json = await res.json();
-        const tabs = json[groupName]?.tabs ?? json.default?.tabs ?? [];
-        const tabIds = [];
-        const groups = await chrome.tabGroups.query({});
-        for await (const group of groups){
-            await chrome.tabGroups.update(group.id, {
-                collapsed: true
-            });
-        }
-        for await (const tab of tabs){
-            const option = tab ? {
-                url: tab
-            } : {};
-            internalTabCreatingModeStartUnixTimeMs = Date.now();
-            const id = (await chrome.tabs.create(option)).id;
-            if (!id) continue;
-            tabIds.push(id);
-        }
-        const groupId = await chrome.tabs.group({
-            tabIds
-        });
-        if (!groupId) return;
-        await chrome.tabGroups.update(groupId, {
-            title: groupName
-        });
-    }).catch((e)=>{
-        createNotification("通信エラー", e.toString());
-    });
-}
-let activeTabGroupId;
-async function findActiveTabGrup() {
-    const groups = await chrome.tabGroups.query({});
-    for await (const group of groups){
-        const tabsInGroup = await chrome.tabs.query({
-            groupId: group.id
-        });
-        const hasActiveTabInGroup = tabsInGroup.some((tab)=>tab.active === true);
-        if (hasActiveTabInGroup) {
-            activeTabGroupId = group.id;
-        }
-    }
-}
-check();
-findActiveTabGrup();
-chrome.windows.onFocusChanged.addListener(()=>{
-    check();
-    findActiveTabGrup();
-});
-chrome.tabs.onActivated.addListener(()=>findActiveTabGrup());
-chrome.tabs.onRemoved.addListener(()=>findActiveTabGrup());
-chrome.tabs.onCreated.addListener(async (tab)=>{
-    if (Date.now() - internalTabCreatingModeStartUnixTimeMs > 500) {
-        const groupId = activeTabGroupId || (await chrome.tabGroups.query({
-            collapsed: false
-        }))[0].id;
-        if (!tab.id) return;
-        chrome.tabs.group({
-            groupId,
-            tabIds: [
-                tab.id
-            ]
-        });
-    }
-});
+
+findActiveTmuxWindow()
+
+chrome.windows.onFocusChanged.addListener(
+    () => findActiveTmuxWindow()
+)
+
+chrome.tabs.onActivated.addListener(
+    () => saveCurrentSesion()
+)
+
+chrome.tabs.onRemoved.addListener(
+    () => saveCurrentSesion()
+)
+
+chrome.tabs.onCreated.addListener(
+    () => saveCurrentSesion()
+)
+
+chrome.tabs.onUpdated.addListener(
+    () => saveCurrentSesion()
+)
